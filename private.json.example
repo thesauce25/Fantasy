@@ -1,0 +1,9 @@
+{
+  "access_token": "your_access_token_here",
+  "consumer_key": "your_consumer_key_here",
+  "consumer_secret": "your_consumer_secret_here",
+  "guid": null,
+  "refresh_token": "your_refresh_token_here",
+  "token_time": 0.0,
+  "token_type": "bearer"
+}
