@@ -41,10 +41,22 @@ class YahooFantasyClient:
     def _initialize_client(self):
         """Initialize the YFPY client with OAuth."""
         try:
+            # Calculate game_id from season for NFL
+            # NFL game IDs: 2024 season = 449, increments by ~1-2 per year
+            # Formula: base year 2001 = 57, then increments
+            season_year = int(self.season) if self.season else 2024
+
+            # For 2024, game_id is approximately 449
+            # This is an approximation - adjust if needed
+            if season_year >= 2024:
+                game_id = 449 + (season_year - 2024)
+            else:
+                game_id = None  # Let YFPY auto-determine for older seasons
+
             self.yahoo_query = YahooFantasySportsQuery(
                 league_id=self.league_id,
                 game_code=self.game_code,
-                game_id=None,  # Will be auto-determined
+                game_id=game_id,
                 yahoo_consumer_key=self.client_id,
                 yahoo_consumer_secret=self.client_secret,
                 env_file_location=Path.cwd(),
@@ -318,6 +330,8 @@ class YahooFantasyClient:
             roster = self.get_roster()
             standings = self.get_standings()
             matchup = self.get_matchup()
+            # Get top 50 available free agents
+            free_agents = self.get_free_agents(count=50)
 
             summary = []
             summary.append("=== FANTASY FOOTBALL TEAM SUMMARY ===\n")
@@ -364,6 +378,35 @@ class YahooFantasyClient:
                         f"{i}. {team['name']}: {team['wins']}-{team['losses']}-{team['ties']} "
                         f"({team['points_for']} PF)"
                     )
+                summary.append("")
+
+            if free_agents:
+                summary.append("=== TOP AVAILABLE FREE AGENTS ===")
+                # Group by position
+                qbs = [p for p in free_agents if p['position'] == 'QB'][:5]
+                rbs = [p for p in free_agents if p['position'] == 'RB'][:5]
+                wrs = [p for p in free_agents if p['position'] == 'WR'][:5]
+                tes = [p for p in free_agents if p['position'] == 'TE'][:5]
+
+                if qbs:
+                    summary.append("QBs:")
+                    for player in qbs:
+                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
+
+                if rbs:
+                    summary.append("\nRBs:")
+                    for player in rbs:
+                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
+
+                if wrs:
+                    summary.append("\nWRs:")
+                    for player in wrs:
+                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
+
+                if tes:
+                    summary.append("\nTEs:")
+                    for player in tes:
+                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
 
             return "\n".join(summary)
         except Exception as e:
