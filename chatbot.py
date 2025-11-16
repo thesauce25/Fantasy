@@ -42,7 +42,7 @@ class FantasyFootballChatbot:
 - NFL player performance and statistics
 - Fantasy football strategy and best practices
 - Start/sit decisions
-- Trade evaluation
+- Trade evaluation and proposal
 - Waiver wire pickups
 - Roster construction
 - Matchup analysis
@@ -53,6 +53,7 @@ You have access to the user's real Yahoo Fantasy Football team data including:
 - Current week matchup
 - Available free agents
 - League scoring rules
+- ALL teams in the league and their rosters (when analyzing trades)
 
 Provide specific, actionable advice based on their actual team and league situation.
 Be conversational, enthusiastic, and helpful. Use your knowledge of NFL players and
@@ -64,6 +65,20 @@ When analyzing players or making recommendations:
 3. Factor in injury status and recent performance
 4. Explain your reasoning clearly
 5. Provide multiple options when appropriate
+
+TRADE PROPOSALS:
+When the user asks about trades or you receive trade analysis data:
+1. Analyze ALL teams in the league to identify the best trade partners
+2. Consider each team's needs based on their roster composition
+3. Propose specific, realistic trades that benefit BOTH teams
+4. Consider team records (contenders vs rebuilding teams have different needs)
+5. Format proposals clearly with:
+   - Target team name
+   - Players you give
+   - Players you receive
+   - Clear rationale explaining why both teams benefit
+6. Propose 2-4 different trade options when possible
+7. Rank proposals by likelihood of acceptance and value for the user
 
 Keep responses concise but informative. Use bullet points and clear formatting when helpful."""
 
@@ -82,20 +97,44 @@ Keep responses concise but informative. Use bullet points and clear formatting w
             self.console.print("[yellow]\nSee README.md for detailed setup instructions.[/yellow]")
             return False
 
-    def get_team_context(self) -> str:
-        """Get context about the user's team and league."""
+    def get_team_context(self, include_trade_context: bool = False) -> str:
+        """Get context about the user's team and league.
+
+        Args:
+            include_trade_context: If True, includes all teams' rosters for trade analysis
+        """
         if not self.yahoo_client:
             return "No team data available. Please configure Yahoo API access."
 
         try:
-            return self.yahoo_client.format_team_summary()
+            if include_trade_context:
+                return self.yahoo_client.format_trade_context()
+            else:
+                return self.yahoo_client.format_team_summary()
         except Exception as e:
             return f"Unable to fetch team data: {e}"
 
+    def _is_trade_query(self, message: str) -> bool:
+        """Detect if the user is asking about trades."""
+        trade_keywords = [
+            'trade', 'trades', 'trading',
+            'trade for', 'trade away', 'trade proposal',
+            'who should i trade', 'what trades',
+            'trade target', 'trade candidate',
+            'trade offer', 'propose a trade',
+            'other teams', 'other rosters',
+            'league rosters', 'all teams'
+        ]
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in trade_keywords)
+
     def chat(self, user_message: str) -> str:
         """Send a message to Claude and get a response."""
+        # Detect if this is a trade-related query
+        is_trade_query = self._is_trade_query(user_message)
+
         # Get fresh team context for each message
-        team_context = self.get_team_context()
+        team_context = self.get_team_context(include_trade_context=is_trade_query)
 
         # Add user message to conversation history
         self.conversation_history.append({
@@ -115,6 +154,12 @@ Keep responses concise but informative. Use bullet points and clear formatting w
             messages.append({
                 "role": "assistant",
                 "content": "Thanks! I've reviewed your team. I'm ready to help with any fantasy football questions or advice you need. What would you like to know?"
+            })
+        # If this is a trade query, inject trade context into the conversation
+        elif is_trade_query:
+            messages.append({
+                "role": "user",
+                "content": f"[TRADE ANALYSIS REQUEST - Here's the full league data with all teams and rosters]\n\n{team_context}"
             })
 
         # Add conversation history
@@ -195,17 +240,28 @@ Keep responses concise but informative. Use bullet points and clear formatting w
 
 **Example Questions:**
 - "Should I start [Player A] or [Player B] this week?"
-- "What trades should I consider?"
+- "What trades should I consider?" (analyzes all league rosters)
+- "Propose trades for me" (gets specific trade proposals)
+- "Who should I trade for?" (identifies best trade targets)
 - "Who are the best players on waivers?"
 - "Analyze my team's strengths and weaknesses"
 - "What's my chances of winning this week?"
+
+**Trade Analysis:**
+When you ask about trades, I'll automatically fetch all teams' rosters in your league
+and propose specific trades that make sense for both you and your trade partners.
 """
                     self.console.print(Markdown(help_text))
                     continue
 
                 # Get response from Claude
                 self.console.print()  # Blank line
-                with self.console.status("[bold green]Thinking...[/bold green]"):
+
+                # Show different status message for trade queries (they take longer)
+                is_trade = self._is_trade_query(user_input)
+                status_msg = "[bold green]Fetching all league rosters for trade analysis...[/bold green]" if is_trade else "[bold green]Thinking...[/bold green]"
+
+                with self.console.status(status_msg):
                     response = self.chat(user_input)
 
                 # Display response

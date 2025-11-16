@@ -304,6 +304,166 @@ class YahooFantasyClient:
         # Disabled - Yahoo API returns outdated player data
         return []
 
+    def get_all_league_teams(self) -> List[Dict[str, Any]]:
+        """Get all teams in the league with their basic info and team IDs."""
+        try:
+            standings_obj = self.yahoo_query.get_league_standings()
+
+            if not hasattr(standings_obj, 'teams') or not standings_obj.teams:
+                return []
+
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
+            teams = []
+            for team in standings_obj.teams:
+                team_info = {
+                    'team_id': team.team_id,
+                    'team_key': team.team_key,
+                    'name': decode_if_bytes(team.name),
+                    'rank': team.team_standings.rank if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'wins': team.team_standings.outcome_totals.wins if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'losses': team.team_standings.outcome_totals.losses if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'ties': team.team_standings.outcome_totals.ties if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'points_for': float(team.team_standings.points_for) if hasattr(team, 'team_standings') and team.team_standings else 0.0,
+                    'points_against': float(team.team_standings.points_against) if hasattr(team, 'team_standings') and team.team_standings else 0.0,
+                    'managers': [decode_if_bytes(m.nickname) for m in team.managers] if hasattr(team, 'managers') and team.managers else [],
+                }
+                teams.append(team_info)
+
+            # Sort by rank
+            teams.sort(key=lambda x: x['rank'])
+            return teams
+        except Exception as e:
+            print(f"Error fetching all league teams: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def get_all_teams_rosters(self) -> Dict[str, Any]:
+        """Get rosters for all teams in the league.
+
+        Returns:
+            Dict mapping team names to their roster data and team info
+        """
+        try:
+            all_teams = self.get_all_league_teams()
+            my_team = self.get_my_team()
+
+            teams_data = {}
+
+            for team in all_teams:
+                team_id = team['team_id']
+                team_name = team['name']
+
+                # Mark if this is the user's team
+                is_my_team = my_team and team_name == my_team['name']
+
+                roster = self.get_roster(team_id)
+
+                teams_data[team_name] = {
+                    'team_id': team_id,
+                    'team_key': team['team_key'],
+                    'is_my_team': is_my_team,
+                    'rank': team['rank'],
+                    'record': f"{team['wins']}-{team['losses']}-{team['ties']}",
+                    'wins': team['wins'],
+                    'losses': team['losses'],
+                    'ties': team['ties'],
+                    'points_for': team['points_for'],
+                    'points_against': team['points_against'],
+                    'managers': team['managers'],
+                    'roster': roster,
+                }
+
+            return teams_data
+        except Exception as e:
+            print(f"Error fetching all teams rosters: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
+    def format_trade_context(self) -> str:
+        """Format trade proposal context with all teams and rosters for AI analysis."""
+        try:
+            league_info = self.get_league_info()
+            my_team = self.get_my_team()
+            all_teams_data = self.get_all_teams_rosters()
+
+            if not all_teams_data:
+                return "Error: Could not fetch league team data for trade analysis."
+
+            summary = []
+            summary.append("=== TRADE PROPOSAL CONTEXT ===\n")
+
+            if league_info:
+                summary.append(f"League: {league_info['name']}")
+                summary.append(f"Season: {league_info['season']}")
+                summary.append(f"Current Week: {league_info['current_week']}")
+                summary.append(f"Total Teams: {league_info['num_teams']}\n")
+
+            if my_team:
+                summary.append(f"YOUR TEAM: {my_team['name']}")
+                summary.append(f"Record: {my_team['wins']}-{my_team['losses']}-{my_team['ties']}")
+                summary.append(f"Points For: {my_team['points_for']}\n")
+
+            summary.append("=== ALL TEAMS IN LEAGUE ===\n")
+
+            for team_name, team_data in all_teams_data.items():
+                marker = " ← YOUR TEAM" if team_data['is_my_team'] else ""
+                summary.append(f"{'='*60}")
+                summary.append(f"#{team_data['rank']} {team_name}{marker}")
+                summary.append(f"{'='*60}")
+                summary.append(f"Record: {team_data['record']} | PF: {team_data['points_for']:.1f} | PA: {team_data['points_against']:.1f}")
+
+                if team_data['managers']:
+                    summary.append(f"Manager(s): {', '.join(team_data['managers'])}")
+
+                summary.append("")
+
+                # Format roster
+                roster = team_data['roster']
+                if roster:
+                    # Group by position
+                    starters = [p for p in roster if p['selected_position'] not in ['BN', 'IR']]
+                    bench = [p for p in roster if p['selected_position'] in ['BN', 'IR']]
+
+                    if starters:
+                        summary.append("STARTERS:")
+                        for player in starters:
+                            status = f" [{player['status']}]" if player['status'] != 'Healthy' else ''
+                            summary.append(f"  {player['selected_position']:4s}: {player['name']:25s} {player['team']:3s}{status}")
+
+                    if bench:
+                        summary.append("\nBENCH:")
+                        for player in bench:
+                            status = f" [{player['status']}]" if player['status'] != 'Healthy' else ''
+                            summary.append(f"  {player['position']:4s}: {player['name']:25s} {player['team']:3s}{status}")
+                else:
+                    summary.append("  (No roster data available)")
+
+                summary.append("")
+
+            summary.append("\n" + "="*60)
+            summary.append("INSTRUCTIONS FOR TRADE PROPOSALS:")
+            summary.append("="*60)
+            summary.append("Analyze the rosters above and propose specific trades that would:")
+            summary.append("1. Improve your team's championship potential")
+            summary.append("2. Address positional weaknesses or depth issues")
+            summary.append("3. Be fair and realistic (other team must benefit too)")
+            summary.append("4. Consider team records (contenders vs. rebuilding teams)")
+            summary.append("\nFormat your proposals as:")
+            summary.append("TRADE PROPOSAL #X")
+            summary.append("  TO: [Team Name]")
+            summary.append("  YOU GIVE: [Player(s)]")
+            summary.append("  YOU GET: [Player(s)]")
+            summary.append("  RATIONALE: [Why this trade makes sense for both teams]")
+            summary.append("")
+
+            return "\n".join(summary)
+        except Exception as e:
+            return f"Error generating trade context: {e}"
+
     def format_team_summary(self) -> str:
         """Format a summary of the user's team and league."""
         try:
