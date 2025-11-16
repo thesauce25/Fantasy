@@ -298,21 +298,41 @@ class YahooFantasyClient:
             def decode_if_bytes(val):
                 return val.decode('utf-8') if isinstance(val, bytes) else val
 
-            # YFPY 17.0 get_league_players() doesn't accept limit/count parameters
-            # We fetch all available players and manually limit results
-            free_agents = self.yahoo_query.get_league_players(
-                status='A'  # A = available players only
+            # YFPY 17.0 uses 'player_count_limit' parameter
+            # Fetch more players than needed since we'll filter for available only
+            all_players = self.yahoo_query.get_league_players(
+                player_count_limit=200,  # Get top 200 players
+                player_count_start=0
             )
 
             players = []
-            if not free_agents:
+            if not all_players:
                 return []
 
             # Convert to list if it's not already
-            if not isinstance(free_agents, list):
-                free_agents = [free_agents] if free_agents else []
+            if not isinstance(all_players, list):
+                all_players = [all_players] if all_players else []
 
-            for player in free_agents:
+            for player in all_players:
+                # Check if player is available (not owned by any team)
+                # ownership status is in player.ownership or player_ownership
+                is_available = False
+                if hasattr(player, 'ownership'):
+                    ownership = player.ownership
+                    # If ownership_type is 'freeagents' or 'waivers', player is available
+                    if hasattr(ownership, 'ownership_type'):
+                        ownership_type = decode_if_bytes(ownership.ownership_type)
+                        is_available = ownership_type in ['freeagents', 'waivers']
+                elif hasattr(player, 'player_ownership'):
+                    ownership = player.player_ownership
+                    if hasattr(ownership, 'ownership_type'):
+                        ownership_type = decode_if_bytes(ownership.ownership_type)
+                        is_available = ownership_type in ['freeagents', 'waivers']
+
+                # Skip owned players
+                if not is_available:
+                    continue
+
                 # Filter by position if specified
                 if position:
                     player_pos = player.primary_position if hasattr(player, 'primary_position') else ''
