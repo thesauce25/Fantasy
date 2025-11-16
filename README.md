@@ -127,22 +127,33 @@ Fantasy/
 
 ### Waiver Wire Intelligence
 
-The app uses a multi-strategy approach to provide accurate waiver wire information:
+**⚠️ IMPORTANT: Known Yahoo API Limitation**
 
-1. **Player Data Fetching**: Retrieves available players from Yahoo Fantasy API
-2. **Transaction Tracking**: Analyzes recent league transactions to identify:
-   - Recently dropped players (marked with 🔥)
-   - Recently added players (filtered out as likely unavailable)
-3. **Smart Filtering**:
-   - Filters by ownership type (waivers, free agents)
-   - Validates player data quality
-   - Removes injured/suspended players from top recommendations
-4. **Intelligent Ranking**:
-   - Prioritizes by ownership percentage (higher % = more reliable)
-   - Boosts recently dropped players (potential overreactions)
-   - Considers injury status and team affiliation
+Yahoo's `get_league_players()` API endpoint currently returns severely outdated player data (retired players, wrong teams, 0% ownership for active players). This is a Yahoo API issue affecting all third-party developers, not a bug in this app.
 
-**Note**: The Yahoo Fantasy API has some limitations with player data freshness. The app does its best to filter out stale information, but always cross-reference important decisions with the Yahoo Fantasy website.
+**How to Use the Chatbot for Waiver Wire Decisions:**
+
+Since live waiver data isn't available from Yahoo's API, use this workflow:
+
+1. **Check your Yahoo Fantasy league website** to see available players
+2. **Copy player names** you're considering
+3. **Ask the chatbot** for strategic advice:
+   ```
+   I can pick up Quentin Johnston, Romeo Doubs, or Jalen Tolbert.
+   Who should I target? I'd drop either Chimere Dike or Troy Franklin.
+   ```
+
+**What the Chatbot CAN Help With:**
+- ✅ Evaluate specific players you're considering
+- ✅ Recommend which bench players to drop
+- ✅ Analyze your roster needs and positional depth
+- ✅ Compare player schedules and matchups
+- ✅ Provide ROS (rest of season) outlooks
+- ✅ Suggest positions to target on waivers
+
+**What Doesn't Work:**
+- ❌ Automatically showing your league's available players
+- ❌ Live ownership percentages from Yahoo leagues
 
 ## Troubleshooting
 
