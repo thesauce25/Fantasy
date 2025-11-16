@@ -67,97 +67,148 @@ class YahooFantasyClient:
         """Get information about the league."""
         try:
             league = self.yahoo_query.get_league_info()
+
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
             return {
-                'name': league.name,
+                'name': decode_if_bytes(league.name),
                 'season': league.season,
                 'num_teams': league.num_teams,
                 'current_week': league.current_week,
                 'start_week': league.start_week,
                 'end_week': league.end_week,
-                'game_code': league.game_code,
-                'scoring_type': league.scoring_type,
-                'league_type': league.league_type,
+                'game_code': decode_if_bytes(league.game_code) if hasattr(league, 'game_code') else 'nfl',
+                'scoring_type': decode_if_bytes(league.scoring_type) if hasattr(league, 'scoring_type') else 'head',
+                'league_type': decode_if_bytes(league.league_type) if hasattr(league, 'league_type') else 'private',
             }
         except Exception as e:
             print(f"Error fetching league info: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_my_team(self) -> Optional[Dict[str, Any]]:
         """Get the user's fantasy team information."""
         try:
+            # First get user's teams to find which team belongs to the authenticated user
+            user_teams = self.yahoo_query.get_user_teams()
+
+            # Get all league teams
             teams = self.yahoo_query.get_league_teams()
             if not teams:
                 return None
 
-            # Find the user's team (usually the first one, but let's check)
-            for team in teams:
-                team_info = {
-                    'team_key': team.team_key,
-                    'team_id': team.team_id,
-                    'name': team.name,
-                    'managers': [m.nickname for m in team.managers] if hasattr(team, 'managers') else [],
-                    'wins': team.team_standings.outcome_totals.wins if hasattr(team, 'team_standings') else 0,
-                    'losses': team.team_standings.outcome_totals.losses if hasattr(team, 'team_standings') else 0,
-                    'ties': team.team_standings.outcome_totals.ties if hasattr(team, 'team_standings') else 0,
-                    'points_for': team.team_points.total if hasattr(team, 'team_points') else 0,
-                    'points_against': team.team_points.total if hasattr(team, 'team_points') else 0,
-                }
-                # For now, return the first team found
-                return team_info
+            # Find the user's team by matching team_key
+            my_team = None
+            if user_teams and len(user_teams) > 0:
+                # user_teams returns teams across all leagues, find ours
+                for ut in user_teams:
+                    for team in teams:
+                        if team.team_key == ut.team_key:
+                            my_team = team
+                            break
+                    if my_team:
+                        break
 
-            return None
+            # If we couldn't match, just use the first team (fallback)
+            if not my_team:
+                my_team = teams[0]
+
+            # Decode bytes to string if necessary
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
+            team_info = {
+                'team_key': my_team.team_key,
+                'team_id': my_team.team_id,
+                'name': decode_if_bytes(my_team.name),
+                'managers': [decode_if_bytes(m.nickname) for m in my_team.managers] if hasattr(my_team, 'managers') and my_team.managers else [],
+                'wins': my_team.team_standings.outcome_totals.wins if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
+                'losses': my_team.team_standings.outcome_totals.losses if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
+                'ties': my_team.team_standings.outcome_totals.ties if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
+                'points_for': float(my_team.team_standings.points_for) if hasattr(my_team, 'team_standings') and my_team.team_standings else 0.0,
+                'points_against': float(my_team.team_standings.points_against) if hasattr(my_team, 'team_standings') and my_team.team_standings else 0.0,
+            }
+            return team_info
+
         except Exception as e:
             print(f"Error fetching team: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_roster(self, team_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get the roster for a team."""
         try:
-            roster = self.yahoo_query.get_team_roster_by_week(
-                team_id=team_id if team_id else self.get_my_team()['team_id'],
+            if not team_id:
+                my_team = self.get_my_team()
+                if not my_team:
+                    return []
+                team_id = my_team['team_id']
+
+            roster_obj = self.yahoo_query.get_team_roster_by_week(
+                team_id=team_id,
                 chosen_week='current'
             )
 
+            # Roster is an object with a .players attribute
+            if not hasattr(roster_obj, 'players') or not roster_obj.players:
+                return []
+
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
             players = []
-            for player in roster:
+            for player in roster_obj.players:
                 player_info = {
-                    'name': player.name.full,
+                    'name': decode_if_bytes(player.name.full) if hasattr(player.name, 'full') else decode_if_bytes(str(player.name)),
                     'player_id': player.player_id,
-                    'position': player.primary_position,
-                    'status': player.status if hasattr(player, 'status') else 'Healthy',
-                    'selected_position': player.selected_position.position if hasattr(player, 'selected_position') else 'BN',
-                    'team': player.editorial_team_abbr if hasattr(player, 'editorial_team_abbr') else '',
-                    'bye_week': player.bye_weeks.week if hasattr(player, 'bye_weeks') else None,
+                    'position': player.primary_position if hasattr(player, 'primary_position') else 'N/A',
+                    'status': player.status if hasattr(player, 'status') and player.status else 'Healthy',
+                    'selected_position': player.selected_position.position if hasattr(player, 'selected_position') and player.selected_position else 'BN',
+                    'team': decode_if_bytes(player.editorial_team_abbr) if hasattr(player, 'editorial_team_abbr') else '',
+                    'bye_week': player.bye_weeks.week if hasattr(player, 'bye_weeks') and player.bye_weeks else None,
                 }
 
                 # Add stats if available
                 if hasattr(player, 'player_stats') and player.player_stats:
-                    player_info['stats'] = {
-                        stat.stat_id: stat.value for stat in player.player_stats.stats
-                    }
+                    if hasattr(player.player_stats, 'stats'):
+                        player_info['stats'] = {
+                            stat.stat_id: stat.value for stat in player.player_stats.stats
+                        }
 
                 players.append(player_info)
 
             return players
         except Exception as e:
             print(f"Error fetching roster: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def get_standings(self) -> List[Dict[str, Any]]:
         """Get league standings."""
         try:
-            standings = self.yahoo_query.get_league_standings()
+            standings_obj = self.yahoo_query.get_league_standings()
+
+            # Standings is an object with a .teams attribute
+            if not hasattr(standings_obj, 'teams') or not standings_obj.teams:
+                return []
+
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
 
             teams = []
-            for team in standings:
+            for team in standings_obj.teams:
                 team_info = {
-                    'rank': team.team_standings.rank if hasattr(team, 'team_standings') else 0,
-                    'name': team.name,
-                    'wins': team.team_standings.outcome_totals.wins if hasattr(team, 'team_standings') else 0,
-                    'losses': team.team_standings.outcome_totals.losses if hasattr(team, 'team_standings') else 0,
-                    'ties': team.team_standings.outcome_totals.ties if hasattr(team, 'team_standings') else 0,
-                    'points_for': team.team_points.total if hasattr(team, 'team_points') else 0,
-                    'points_against': team.team_projected_points.total if hasattr(team, 'team_projected_points') else 0,
+                    'rank': team.team_standings.rank if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'name': decode_if_bytes(team.name),
+                    'wins': team.team_standings.outcome_totals.wins if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'losses': team.team_standings.outcome_totals.losses if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'ties': team.team_standings.outcome_totals.ties if hasattr(team, 'team_standings') and team.team_standings else 0,
+                    'points_for': float(team.team_standings.points_for) if hasattr(team, 'team_standings') and team.team_standings else 0.0,
+                    'points_against': float(team.team_standings.points_against) if hasattr(team, 'team_standings') and team.team_standings else 0.0,
                 }
                 teams.append(team_info)
 
@@ -166,6 +217,8 @@ class YahooFantasyClient:
             return teams
         except Exception as e:
             print(f"Error fetching standings: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def get_matchup(self, week: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -179,23 +232,39 @@ class YahooFantasyClient:
             if not my_team:
                 return None
 
-            matchup = self.yahoo_query.get_team_matchups_by_week(
-                team_id=my_team['team_id'],
-                chosen_week=str(week)
-            )
+            # get_team_matchups returns a list of matchups
+            matchups = self.yahoo_query.get_team_matchups(team_id=my_team['team_id'])
 
-            if not matchup or not matchup.teams:
+            if not matchups:
+                return None
+
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
+            # Find the matchup for the specified week
+            current_matchup = None
+            for matchup in matchups:
+                if hasattr(matchup, 'week') and int(matchup.week) == int(week):
+                    current_matchup = matchup
+                    break
+
+            # If no specific week matchup found, use the most recent one
+            if not current_matchup and len(matchups) > 0:
+                current_matchup = matchups[-1]  # Most recent
+
+            if not current_matchup:
                 return None
 
             # Get both teams in the matchup
             teams = []
-            for team in matchup.teams:
-                team_data = {
-                    'name': team.name,
-                    'points': team.team_points.total if hasattr(team, 'team_points') else 0,
-                    'projected_points': team.team_projected_points.total if hasattr(team, 'team_projected_points') else 0,
-                }
-                teams.append(team_data)
+            if hasattr(current_matchup, 'teams') and current_matchup.teams:
+                for team in current_matchup.teams:
+                    team_data = {
+                        'name': decode_if_bytes(team.name) if hasattr(team, 'name') else 'Unknown',
+                        'points': float(team.team_points.total) if hasattr(team, 'team_points') and team.team_points else 0.0,
+                        'projected_points': float(team.team_projected_points.total) if hasattr(team, 'team_projected_points') and team.team_projected_points else 0.0,
+                    }
+                    teams.append(team_data)
 
             return {
                 'week': week,
@@ -203,11 +272,16 @@ class YahooFantasyClient:
             }
         except Exception as e:
             print(f"Error fetching matchup: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_free_agents(self, position: Optional[str] = None, count: int = 25) -> List[Dict[str, Any]]:
         """Get top available free agents."""
         try:
+            def decode_if_bytes(val):
+                return val.decode('utf-8') if isinstance(val, bytes) else val
+
             # YFPY can get free agents
             free_agents = self.yahoo_query.get_league_players(
                 player_count=count,
@@ -218,17 +292,19 @@ class YahooFantasyClient:
             players = []
             for player in free_agents:
                 player_info = {
-                    'name': player.name.full,
+                    'name': decode_if_bytes(player.name.full) if hasattr(player.name, 'full') else decode_if_bytes(str(player.name)),
                     'player_id': player.player_id,
-                    'position': player.primary_position,
-                    'team': player.editorial_team_abbr if hasattr(player, 'editorial_team_abbr') else '',
-                    'percent_owned': player.percent_owned.value if hasattr(player, 'percent_owned') else 0,
+                    'position': decode_if_bytes(player.primary_position) if hasattr(player, 'primary_position') else '',
+                    'team': decode_if_bytes(player.editorial_team_abbr) if hasattr(player, 'editorial_team_abbr') else '',
+                    'percent_owned': float(player.percent_owned.value) if hasattr(player, 'percent_owned') and player.percent_owned else 0.0,
                 }
                 players.append(player_info)
 
             return players
         except Exception as e:
             print(f"Error fetching free agents: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def format_team_summary(self) -> str:
