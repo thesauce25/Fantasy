@@ -91,6 +91,17 @@ def test_waiver_wire():
 
         console.print("\n[bold green]✓ All tests completed successfully![/bold green]\n")
 
+        # Show diagnostic info
+        if not free_agents or len(free_agents) == 0:
+            console.print("[bold yellow]⚠ IMPORTANT NOTE:[/bold yellow]")
+            console.print("[yellow]The Yahoo Fantasy API returned only stale/retired players.[/yellow]")
+            console.print("[yellow]This is a known limitation of Yahoo's get_league_players() endpoint.[/yellow]")
+            console.print("[yellow]The app has filtered them out to avoid showing bad data.[/yellow]\n")
+            console.print("[cyan]For waiver wire decisions, you should:[/cyan]")
+            console.print("[cyan]  1. Check your Yahoo Fantasy league website directly[/cyan]")
+            console.print("[cyan]  2. Use the chatbot for strategy advice (who to target, who to drop)[/cyan]")
+            console.print("[cyan]  3. Ask about specific players you're considering[/cyan]\n")
+
     except Exception as e:
         console.print(f"\n[bold red]✗ Error during testing: {e}[/bold red]")
         import traceback

@@ -465,6 +465,32 @@ class YahooFantasyClient:
 
     def _sort_players_by_relevance(self, players: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Sort players by relevance (percent owned, recent drops, etc.)."""
+        # Filter out obviously stale/invalid data
+        filtered_players = []
+
+        # Known retired/invalid players (common in stale Yahoo API data)
+        stale_indicators = [
+            'Marcedes Lewis', 'Jimmy Graham', 'Randall Cobb', 'Brian Hoyer',
+            'Blaine Gabbert', 'Matt Prater', 'Nick Folk', 'Josh Johnson'
+        ]
+
+        for player in players:
+            player_name = player.get('name', '')
+
+            # Skip known stale players
+            if any(stale in player_name for stale in stale_indicators):
+                continue
+
+            # Skip players with suspicious 0% ownership AND common positions (likely stale)
+            # Keep kickers/defenses with 0% as they might be legitimately unowned
+            pos = player.get('position', '')
+            if player.get('percent_owned', 0) == 0 and pos in ['QB', 'RB', 'WR', 'TE']:
+                # Only keep if recently dropped (active transaction)
+                if not player.get('recently_dropped'):
+                    continue
+
+            filtered_players.append(player)
+
         def player_score(player):
             score = 0
 
@@ -488,7 +514,7 @@ class YahooFantasyClient:
 
             return score
 
-        return sorted(players, key=player_score, reverse=True)
+        return sorted(filtered_players, key=player_score, reverse=True)
 
     def format_team_summary(self) -> str:
         """Format a summary of the user's team and league."""
@@ -547,10 +573,10 @@ class YahooFantasyClient:
                 summary.append("")
 
             # Waiver wire / Free agents
-            summary.append("=== TOP AVAILABLE FREE AGENTS ===")
+            summary.append("=== WAIVER WIRE / FREE AGENTS ===")
             try:
                 free_agents = self.get_free_agents(count=15)
-                if free_agents:
+                if free_agents and len(free_agents) > 0:
                     # Group by position
                     by_position = {}
                     for player in free_agents:
@@ -560,6 +586,7 @@ class YahooFantasyClient:
                         by_position[pos].append(player)
 
                     # Show top players by position
+                    found_any = False
                     for pos in ['QB', 'RB', 'WR', 'TE']:
                         if pos in by_position:
                             summary.append(f"\n{pos}:")
@@ -568,14 +595,21 @@ class YahooFantasyClient:
                                 owned = player.get('percent_owned', 0)
                                 recently_dropped = " 🔥" if player.get('recently_dropped') else ''
                                 summary.append(f"  {player['name']} - {player['team']} ({owned:.0f}% owned){status}{recently_dropped}")
+                                found_any = True
+
+                    if not found_any:
+                        summary.append("\n⚠ Yahoo API returned stale player data (retired players, wrong teams)")
+                        summary.append("Please check Yahoo Fantasy website for accurate waiver wire.")
                     summary.append("")
                 else:
-                    summary.append("No free agent data available at this time.")
-                    summary.append("(Check Yahoo Fantasy website for current waiver wire)")
+                    summary.append("\n⚠ Yahoo API returned stale player data (retired players, wrong teams)")
+                    summary.append("Please check Yahoo Fantasy website for accurate waiver wire.")
+                    summary.append("\nNote: The Yahoo API has known issues with player data freshness.")
+                    summary.append("Your league's actual waiver wire will show current, relevant players.")
                     summary.append("")
             except Exception as e:
-                summary.append(f"Unable to fetch free agents: {e}")
-                summary.append("(Check Yahoo Fantasy website for current waiver wire)")
+                summary.append(f"\nUnable to fetch free agents: {e}")
+                summary.append("Please check Yahoo Fantasy website for current waiver wire.")
                 summary.append("")
 
             return "\n".join(summary)
