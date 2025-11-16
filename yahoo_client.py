@@ -157,7 +157,7 @@ class YahooFantasyClient:
             return None
 
     def get_roster(self, team_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get the roster for a team."""
+        """Get the roster for a team with enhanced stats."""
         try:
             if not team_id:
                 my_team = self.get_my_team()
@@ -189,12 +189,24 @@ class YahooFantasyClient:
                     'bye_week': player.bye_weeks.week if hasattr(player, 'bye_weeks') and player.bye_weeks else None,
                 }
 
-                # Add stats if available
+                # Add current week stats if available
                 if hasattr(player, 'player_stats') and player.player_stats:
                     if hasattr(player.player_stats, 'stats'):
-                        player_info['stats'] = {
-                            stat.stat_id: stat.value for stat in player.player_stats.stats
-                        }
+                        player_info['current_stats'] = self._format_player_stats(player.player_stats.stats)
+
+                # Add player points if available
+                if hasattr(player, 'player_points') and player.player_points:
+                    if hasattr(player.player_points, 'total'):
+                        player_info['points_current_week'] = float(player.player_points.total)
+
+                # Add projected points if available
+                if hasattr(player, 'player_projected_points') and player.player_projected_points:
+                    if hasattr(player.player_projected_points, 'total'):
+                        player_info['projected_points'] = float(player.player_projected_points.total)
+
+                # Add ownership data if available
+                if hasattr(player, 'percent_owned'):
+                    player_info['percent_owned'] = player.percent_owned
 
                 players.append(player_info)
 
@@ -204,6 +216,106 @@ class YahooFantasyClient:
             import traceback
             traceback.print_exc()
             return []
+
+    def _format_player_stats(self, stats) -> Dict[str, Any]:
+        """Format player stats into a readable dictionary.
+
+        Common Yahoo Fantasy Football stat IDs:
+        4: Passing Yards, 5: Passing TDs, 6: Interceptions
+        9: Rushing Yards, 10: Rushing TDs
+        11: Receptions, 12: Receiving Yards, 13: Receiving TDs
+        15: Return TDs, 16: 2-Point Conversions
+        18: Fumbles Lost, 57: Offensive Fumble Return TD
+        """
+        if not stats:
+            return {}
+
+        # Mapping of common stat IDs to readable names
+        stat_mapping = {
+            '4': 'passing_yards',
+            '5': 'passing_tds',
+            '6': 'interceptions',
+            '9': 'rushing_yards',
+            '10': 'rushing_tds',
+            '11': 'receptions',
+            '12': 'receiving_yards',
+            '13': 'receiving_tds',
+            '15': 'return_tds',
+            '16': 'two_point_conversions',
+            '18': 'fumbles_lost',
+            '57': 'fumble_return_tds',
+        }
+
+        formatted_stats = {}
+        for stat in stats:
+            stat_id = str(stat.stat_id)
+            stat_name = stat_mapping.get(stat_id, f'stat_{stat_id}')
+            try:
+                formatted_stats[stat_name] = float(stat.value) if stat.value else 0
+            except (ValueError, AttributeError):
+                formatted_stats[stat_name] = stat.value
+
+        return formatted_stats
+
+    def get_player_season_stats(self, player_key: str) -> Optional[Dict[str, Any]]:
+        """Get season-long stats for a specific player."""
+        try:
+            stats_obj = self.yahoo_query.get_player_stats_for_season(
+                player_key=player_key
+            )
+
+            if not stats_obj:
+                return None
+
+            stats_data = {
+                'player_key': player_key,
+            }
+
+            # Extract stats
+            if hasattr(stats_obj, 'player_stats') and stats_obj.player_stats:
+                if hasattr(stats_obj.player_stats, 'stats'):
+                    stats_data['season_stats'] = self._format_player_stats(stats_obj.player_stats.stats)
+
+            # Extract points
+            if hasattr(stats_obj, 'player_points') and stats_obj.player_points:
+                if hasattr(stats_obj.player_points, 'total'):
+                    stats_data['season_points'] = float(stats_obj.player_points.total)
+
+            return stats_data
+        except Exception as e:
+            print(f"Error fetching season stats for player {player_key}: {e}")
+            return None
+
+    def get_player_weekly_stats(self, player_key: str, week: int) -> Optional[Dict[str, Any]]:
+        """Get stats for a specific player for a specific week."""
+        try:
+            stats_obj = self.yahoo_query.get_player_stats_by_week(
+                player_key=player_key,
+                week=week
+            )
+
+            if not stats_obj:
+                return None
+
+            stats_data = {
+                'player_key': player_key,
+                'week': week,
+            }
+
+            # Extract stats
+            if hasattr(stats_obj, 'player_stats') and stats_obj.player_stats:
+                if hasattr(stats_obj.player_stats, 'stats'):
+                    stats_data['stats'] = self._format_player_stats(stats_obj.player_stats.stats)
+
+            # Extract points
+            if hasattr(stats_obj, 'player_points') and stats_obj.player_points:
+                if hasattr(stats_obj.player_points, 'total'):
+                    stats_data['points'] = float(stats_obj.player_points.total)
+
+            return stats_data
+        except Exception as e:
+            print(f"Error fetching week {week} stats for player {player_key}: {e}")
+            return None
 
     def get_standings(self) -> List[Dict[str, Any]]:
         """Get league standings."""
@@ -333,7 +445,7 @@ class YahooFantasyClient:
                 summary.append("")
 
             if roster:
-                summary.append("=== YOUR ROSTER ===")
+                summary.append("=== YOUR ROSTER (with stats and projections) ===")
                 # Group by position
                 starters = [p for p in roster if p['selected_position'] not in ['BN', 'IR']]
                 bench = [p for p in roster if p['selected_position'] in ['BN', 'IR']]
@@ -341,14 +453,12 @@ class YahooFantasyClient:
                 if starters:
                     summary.append("Starters:")
                     for player in starters:
-                        status = f" ({player['status']})" if player['status'] != 'Healthy' else ''
-                        summary.append(f"  {player['selected_position']}: {player['name']} - {player['team']}{status}")
+                        summary.append(self._format_player_line(player))
 
                 if bench:
                     summary.append("\nBench:")
                     for player in bench:
-                        status = f" ({player['status']})" if player['status'] != 'Healthy' else ''
-                        summary.append(f"  {player['name']} - {player['position']} - {player['team']}{status}")
+                        summary.append(self._format_player_line(player))
                 summary.append("")
 
             if standings:
@@ -369,3 +479,102 @@ class YahooFantasyClient:
             return "\n".join(summary)
         except Exception as e:
             return f"Error generating team summary: {e}"
+
+    def get_roster_with_recent_performance(self, team_id: Optional[str] = None, weeks_back: int = 3) -> List[Dict[str, Any]]:
+        """Get roster with recent weekly performance data for trend analysis."""
+        try:
+            roster = self.get_roster(team_id)
+            league_info = self.get_league_info()
+
+            if not league_info or not roster:
+                return roster
+
+            current_week = league_info.get('current_week', 1)
+
+            # Add recent weekly stats for each player
+            for player in roster:
+                player_key = player.get('player_id')
+                if not player_key:
+                    continue
+
+                # Get stats for the last N weeks
+                recent_weeks = []
+                for week_offset in range(1, weeks_back + 1):
+                    week = current_week - week_offset
+                    if week > 0:
+                        weekly_stats = self.get_player_weekly_stats(player_key, week)
+                        if weekly_stats:
+                            recent_weeks.append(weekly_stats)
+
+                if recent_weeks:
+                    player['recent_performance'] = recent_weeks
+
+                    # Calculate average points over recent weeks
+                    points_list = [w.get('points', 0) for w in recent_weeks if 'points' in w]
+                    if points_list:
+                        player['avg_recent_points'] = sum(points_list) / len(points_list)
+
+            return roster
+        except Exception as e:
+            print(f"Error fetching roster with recent performance: {e}")
+            return self.get_roster(team_id)  # Fallback to regular roster
+
+    def _format_player_line(self, player: Dict[str, Any]) -> str:
+        """Format a single player line with stats and projections."""
+        status = f" ({player['status']})" if player.get('status') and player['status'] != 'Healthy' else ''
+        position = player.get('selected_position', player.get('position', 'N/A'))
+        name = player.get('name', 'Unknown')
+        team = player.get('team', '')
+
+        # Build the base line
+        line = f"  {position}: {name} - {team}{status}"
+
+        # Add current week points if available
+        if 'points_current_week' in player:
+            line += f" | Points: {player['points_current_week']:.1f}"
+
+        # Add projected points if available
+        if 'projected_points' in player:
+            line += f" (Proj: {player['projected_points']:.1f})"
+
+        # Add key stats summary if available
+        if 'current_stats' in player and player['current_stats']:
+            stats = player['current_stats']
+            stat_parts = []
+
+            # For QBs
+            if 'passing_yards' in stats and stats['passing_yards'] > 0:
+                stat_parts.append(f"{int(stats['passing_yards'])} pass yds")
+            if 'passing_tds' in stats and stats['passing_tds'] > 0:
+                stat_parts.append(f"{int(stats['passing_tds'])} pass TD")
+
+            # For RBs/WRs/TEs
+            if 'rushing_yards' in stats and stats['rushing_yards'] > 0:
+                stat_parts.append(f"{int(stats['rushing_yards'])} rush yds")
+            if 'rushing_tds' in stats and stats['rushing_tds'] > 0:
+                stat_parts.append(f"{int(stats['rushing_tds'])} rush TD")
+            if 'receptions' in stats and stats['receptions'] > 0:
+                stat_parts.append(f"{int(stats['receptions'])} rec")
+            if 'receiving_yards' in stats and stats['receiving_yards'] > 0:
+                stat_parts.append(f"{int(stats['receiving_yards'])} rec yds")
+            if 'receiving_tds' in stats and stats['receiving_tds'] > 0:
+                stat_parts.append(f"{int(stats['receiving_tds'])} rec TD")
+
+            # Negative stats
+            if 'interceptions' in stats and stats['interceptions'] > 0:
+                stat_parts.append(f"{int(stats['interceptions'])} INT")
+            if 'fumbles_lost' in stats and stats['fumbles_lost'] > 0:
+                stat_parts.append(f"{int(stats['fumbles_lost'])} FUM")
+
+            if stat_parts:
+                line += f"\n      Stats: {', '.join(stat_parts)}"
+
+        # Add ownership percentage if available
+        if 'percent_owned' in player and player['percent_owned']:
+            try:
+                ownership = float(player['percent_owned'])
+                line += f"\n      Ownership: {ownership:.1f}%"
+            except (ValueError, TypeError):
+                pass
+
+        return line

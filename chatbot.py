@@ -48,22 +48,36 @@ class FantasyFootballChatbot:
 - Matchup analysis
 
 You have access to the user's real Yahoo Fantasy Football team data including:
-- Their current roster and lineup
+- Their current roster and lineup with DETAILED STATS
+- Player points scored (current week and projections)
+- Individual player statistics (passing yards, rushing yards, TDs, receptions, etc.)
+- Player injury status and health information
+- Player ownership percentages across leagues
 - League standings and settings
-- Current week matchup
-- Available free agents
-- League scoring rules
-
-Provide specific, actionable advice based on their actual team and league situation.
-Be conversational, enthusiastic, and helpful. Use your knowledge of NFL players and
-strategy to give personalized recommendations.
+- Current week matchup with projected points
+- Team records and points for/against
 
 When analyzing players or making recommendations:
-1. Consider their current team composition
-2. Look at matchups and upcoming schedules
-3. Factor in injury status and recent performance
-4. Explain your reasoning clearly
-5. Provide multiple options when appropriate
+1. **Use the actual stats provided** - You have real data on passing yards, rushing yards, TDs, receptions, etc.
+2. **Consider current week projections** - Compare projected points vs actual performance
+3. **Factor in injury status** - Players marked as Out, Questionable, Doubtful should impact your advice
+4. **Analyze ownership data** - Low ownership gems vs high ownership players
+5. **Review recent performance trends** - Not just name value, but actual production
+6. **Consider matchups** - Compare team's projected points in current matchup
+7. **Explain your reasoning clearly** - Reference specific stats when making recommendations
+8. **Provide multiple options when appropriate** - Give alternatives with pros/cons
+
+For trade recommendations specifically:
+- Analyze both players' actual stats and projections
+- Consider positional depth on the roster
+- Factor in upcoming schedules and bye weeks
+- Evaluate if the trade addresses team weaknesses
+- Use the ownership data to assess player value
+- Consider recent performance trends (improving vs declining)
+
+Be conversational, enthusiastic, and helpful. ALWAYS reference the specific stats, projections,
+and data points you see when making recommendations. This isn't generic advice - you have
+real-time data on this specific team and league.
 
 Keep responses concise but informative. Use bullet points and clear formatting when helpful."""
 
@@ -82,20 +96,109 @@ Keep responses concise but informative. Use bullet points and clear formatting w
             self.console.print("[yellow]\nSee README.md for detailed setup instructions.[/yellow]")
             return False
 
-    def get_team_context(self) -> str:
-        """Get context about the user's team and league."""
+    def get_team_context(self, include_trends: bool = False) -> str:
+        """Get context about the user's team and league.
+
+        Args:
+            include_trends: If True, includes recent weekly performance trends (slower but more detailed)
+        """
         if not self.yahoo_client:
             return "No team data available. Please configure Yahoo API access."
 
         try:
-            return self.yahoo_client.format_team_summary()
+            if include_trends:
+                # This is slower but provides richer data for recommendations
+                return self._format_team_summary_with_trends()
+            else:
+                return self.yahoo_client.format_team_summary()
         except Exception as e:
             return f"Unable to fetch team data: {e}"
 
+    def _format_team_summary_with_trends(self) -> str:
+        """Get team summary with recent performance trends for deeper analysis."""
+        try:
+            league_info = self.yahoo_client.get_league_info()
+            my_team = self.yahoo_client.get_my_team()
+            roster = self.yahoo_client.get_roster_with_recent_performance()
+            standings = self.yahoo_client.get_standings()
+            matchup = self.yahoo_client.get_matchup()
+
+            summary = []
+            summary.append("=== FANTASY FOOTBALL TEAM SUMMARY (WITH TRENDS) ===\n")
+
+            if league_info:
+                summary.append(f"League: {league_info['name']}")
+                summary.append(f"Season: {league_info['season']}")
+                summary.append(f"Current Week: {league_info['current_week']}\n")
+
+            if my_team:
+                summary.append(f"Your Team: {my_team['name']}")
+                summary.append(f"Record: {my_team['wins']}-{my_team['losses']}-{my_team['ties']}")
+                summary.append(f"Points For: {my_team['points_for']}\n")
+
+            if matchup:
+                summary.append("=== CURRENT MATCHUP ===")
+                for team in matchup['teams']:
+                    summary.append(f"{team['name']}: {team['points']} pts (proj: {team['projected_points']})")
+                summary.append("")
+
+            if roster:
+                summary.append("=== YOUR ROSTER (with detailed stats, projections, and trends) ===")
+                starters = [p for p in roster if p['selected_position'] not in ['BN', 'IR']]
+                bench = [p for p in roster if p['selected_position'] in ['BN', 'IR']]
+
+                if starters:
+                    summary.append("Starters:")
+                    for player in starters:
+                        summary.append(self._format_player_with_trends(player))
+
+                if bench:
+                    summary.append("\nBench:")
+                    for player in bench:
+                        summary.append(self._format_player_with_trends(player))
+                summary.append("")
+
+            if standings:
+                summary.append("=== LEAGUE STANDINGS (Top 5) ===")
+                for i, team in enumerate(standings[:5], 1):
+                    summary.append(
+                        f"{i}. {team['name']}: {team['wins']}-{team['losses']}-{team['ties']} "
+                        f"({team['points_for']} PF)"
+                    )
+                summary.append("")
+
+            return "\n".join(summary)
+        except Exception as e:
+            return f"Error generating detailed team summary: {e}"
+
+    def _format_player_with_trends(self, player: dict) -> str:
+        """Format player with recent performance trends."""
+        # Use the base formatting from yahoo_client
+        base_line = self.yahoo_client._format_player_line(player)
+
+        # Add trend analysis if available
+        if 'recent_performance' in player and player['recent_performance']:
+            recent = player['recent_performance']
+            weeks_str = ", ".join([f"Wk{w['week']}: {w.get('points', 0):.1f}pts" for w in recent[:3]])
+            base_line += f"\n      Recent: {weeks_str}"
+
+        if 'avg_recent_points' in player:
+            base_line += f" | Avg: {player['avg_recent_points']:.1f}pts"
+
+        return base_line
+
     def chat(self, user_message: str) -> str:
         """Send a message to Claude and get a response."""
+        # Detect if this is a trade or detailed analysis query
+        trade_keywords = ['trade', 'swap', 'deal', 'who should i', 'start or sit', 'analyze', 'trends', 'recent performance']
+        use_trends = any(keyword in user_message.lower() for keyword in trade_keywords)
+
         # Get fresh team context for each message
-        team_context = self.get_team_context()
+        if use_trends:
+            self.console.print("[dim]Fetching detailed stats and trends...[/dim]")
+            team_context = self.get_team_context(include_trends=True)
+        else:
+            team_context = self.get_team_context(include_trends=False)
 
         # Add user message to conversation history
         self.conversation_history.append({
@@ -115,6 +218,12 @@ Keep responses concise but informative. Use bullet points and clear formatting w
             messages.append({
                 "role": "assistant",
                 "content": "Thanks! I've reviewed your team. I'm ready to help with any fantasy football questions or advice you need. What would you like to know?"
+            })
+        elif use_trends:
+            # For trade/analysis queries, include fresh detailed context
+            messages.append({
+                "role": "user",
+                "content": f"Here's the latest detailed team data with stats and trends:\n\n{team_context}"
             })
 
         # Add conversation history
@@ -193,12 +302,27 @@ Keep responses concise but informative. Use bullet points and clear formatting w
 - `help` - Show this help message
 - `quit`/`exit`/`q` - Exit the chatbot
 
+**What data I have access to:**
+- Player stats (passing/rushing/receiving yards, TDs, receptions, etc.)
+- Current week points and projections
+- Recent performance trends (last 3 weeks)
+- Injury status and health updates
+- Player ownership percentages
+- League standings and matchup data
+- Team records and scoring
+
 **Example Questions:**
 - "Should I start [Player A] or [Player B] this week?"
-- "What trades should I consider?"
-- "Who are the best players on waivers?"
-- "Analyze my team's strengths and weaknesses"
+- "What trades should I consider based on my team's weaknesses?"
+- "Analyze my recent performance trends"
+- "Who on my bench is performing well?"
 - "What's my chances of winning this week?"
+- "Which players are underperforming vs their projections?"
+
+**Smart Features:**
+- Automatically fetches detailed stats when you ask about trades or player analysis
+- Considers recent trends (not just season averages)
+- Uses actual stats from your Yahoo league
 """
                     self.console.print(Markdown(help_text))
                     continue
