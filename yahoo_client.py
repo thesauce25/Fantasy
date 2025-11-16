@@ -119,23 +119,56 @@ class YahooFantasyClient:
             # Find the user's team
             my_team = None
 
-            # If team name is specified in config, use it to find the team
-            if self.team_name:
-                for team in teams:
-                    team_name_decoded = decode_if_bytes(team.name)
-                    if team_name_decoded.lower() == self.team_name.lower():
-                        my_team = team
-                        print(f"✓ Found your team: {team_name_decoded}")
-                        break
+            # Team name is REQUIRED - must be specified in config
+            if not self.team_name:
+                print("\n" + "="*70)
+                print("ERROR: YAHOO_TEAM_NAME is not configured!")
+                print("="*70)
+                print("\nYour team name must be specified to avoid showing wrong team data.")
+                print("\nAvailable teams in your league:")
+                for i, team in enumerate(teams, 1):
+                    team_name = decode_if_bytes(team.name)
+                    managers = [decode_if_bytes(m.nickname) for m in team.managers] if hasattr(team, 'managers') and team.managers else []
+                    print(f"  {i}. {team_name} (Manager: {', '.join(managers)})")
+                print("\nTo fix this:")
+                print("  1. Edit your .env file")
+                print("  2. Set YAHOO_TEAM_NAME to your exact team name (see list above)")
+                print("  3. Example: YAHOO_TEAM_NAME=Team Sauce")
+                print("  4. Restart the chatbot")
+                print("="*70 + "\n")
+                raise ValueError(
+                    "YAHOO_TEAM_NAME is required but not set in .env file. "
+                    "See the list above to find your team name."
+                )
 
-                if not my_team:
-                    print(f"⚠ Warning: Could not find team '{self.team_name}' in league")
-                    print(f"Available teams: {[decode_if_bytes(t.name) for t in teams[:5]]}")
-                    print("Using first team as fallback")
+            # Find team by name (case-insensitive match)
+            for team in teams:
+                team_name_decoded = decode_if_bytes(team.name)
+                if team_name_decoded.lower() == self.team_name.lower():
+                    my_team = team
+                    print(f"✓ Found your team: {team_name_decoded}")
+                    break
 
-            # If no team name specified or not found, use first team
+            # If team not found, show helpful error
             if not my_team:
-                my_team = teams[0]
+                print("\n" + "="*70)
+                print(f"ERROR: Team '{self.team_name}' not found in league!")
+                print("="*70)
+                print("\nAvailable teams in your league:")
+                for i, team in enumerate(teams, 1):
+                    team_name = decode_if_bytes(team.name)
+                    managers = [decode_if_bytes(m.nickname) for m in team.managers] if hasattr(team, 'managers') and team.managers else []
+                    print(f"  {i}. {team_name} (Manager: {', '.join(managers)})")
+                print("\nTo fix this:")
+                print("  1. Edit your .env file")
+                print("  2. Update YAHOO_TEAM_NAME to match one of the teams above (exact match)")
+                print(f"  3. Current value: YAHOO_TEAM_NAME={self.team_name}")
+                print("  4. Restart the chatbot")
+                print("="*70 + "\n")
+                raise ValueError(
+                    f"Team '{self.team_name}' not found in league. "
+                    "Please check the team name in your .env file."
+                )
 
             team_info = {
                 'team_key': my_team.team_key,

@@ -45,6 +45,21 @@ pip install -r requirements.txt
 
 ### 4. Configure Environment Variables
 
+**Option A: Use the Setup Wizard (Recommended)**
+
+```bash
+python setup.py
+```
+
+The setup wizard will guide you through:
+- Creating your Yahoo Developer App credentials
+- Configuring your league ID
+- Setting up your Anthropic API key
+- **Selecting your team name** from a list of teams in your league
+- Testing your configuration
+
+**Option B: Manual Configuration**
+
 ```bash
 cp .env.example .env
 ```
@@ -54,6 +69,7 @@ Edit `.env` and add your credentials:
 - `YAHOO_CLIENT_SECRET`: Your Yahoo app Client Secret
 - `ANTHROPIC_API_KEY`: Your Anthropic API key
 - `YAHOO_LEAGUE_ID`: Your Yahoo Fantasy league ID (found in your league URL)
+- `YAHOO_TEAM_NAME`: **REQUIRED** - Your exact team name as shown in Yahoo Fantasy (e.g., "Team Sauce")
 
 ### 5. First Time Authentication
 
@@ -95,6 +111,7 @@ Type `quit`, `exit`, or `q` to end the conversation.
 Fantasy/
 ├── chatbot.py              # Main chatbot application
 ├── yahoo_client.py         # Yahoo Fantasy API wrapper
+├── setup.py               # Interactive setup wizard
 ├── requirements.txt        # Python dependencies
 ├── .env.example           # Environment variables template
 ├── .gitignore             # Git ignore rules
@@ -108,6 +125,17 @@ Fantasy/
 3. **Personalized Advice**: Claude provides contextual advice based on your specific team and league situation
 
 ## Troubleshooting
+
+### Wrong Team Data / Showing Someone Else's Team
+
+If the chatbot is showing the wrong team's players or data:
+
+1. **Cause**: `YAHOO_TEAM_NAME` is not set or incorrect in your `.env` file
+2. **Fix**:
+   - Run `python setup.py` to configure your team name interactively
+   - OR manually edit `.env` and set `YAHOO_TEAM_NAME=Your Exact Team Name`
+   - Team name must match exactly as shown in Yahoo Fantasy (case-insensitive)
+3. **Verification**: When you start the chatbot, you should see "✓ Found your team: [Your Team Name]"
 
 ### OAuth Token Expired
 

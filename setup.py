@@ -123,6 +123,105 @@ def setup_anthropic_key():
         return False
 
 
+def setup_team_name():
+    """Guide user through team name selection."""
+    print_header("Team Selection")
+
+    print("Now we need to identify YOUR team in the league.")
+    print("\nThis step is CRITICAL to ensure you see the correct team data!")
+    print("We'll connect to Yahoo and show you all teams in your league.")
+
+    print("\n" + "-" * 60)
+    print("\nConnecting to Yahoo Fantasy API...")
+    print("(This may open a browser for OAuth authentication)")
+
+    try:
+        # Reload environment to get the credentials we just set
+        load_dotenv(override=True)
+
+        from yahoo_client import YahooFantasyClient
+
+        # Temporarily allow YahooFantasyClient to initialize without team name
+        yahoo_client = YahooFantasyClient()
+
+        # Get all teams in the league
+        standings_obj = yahoo_client.yahoo_query.get_league_standings()
+        if not hasattr(standings_obj, 'teams') or not standings_obj.teams:
+            print("\n✗ Could not fetch teams from Yahoo API")
+            return False
+
+        teams = standings_obj.teams
+
+        # Decode bytes helper
+        def decode_if_bytes(val):
+            return val.decode('utf-8') if isinstance(val, bytes) else val
+
+        print("\n✓ Found teams in your league:")
+        print("\n" + "-" * 60)
+
+        team_list = []
+        for i, team in enumerate(teams, 1):
+            team_name = decode_if_bytes(team.name)
+            managers = [decode_if_bytes(m.nickname) for m in team.managers] if hasattr(team, 'managers') and team.managers else []
+            team_list.append(team_name)
+            print(f"{i}. {team_name}")
+            if managers:
+                print(f"   Manager(s): {', '.join(managers)}")
+
+        print("-" * 60)
+
+        # Ask user to select their team
+        while True:
+            choice = input("\nEnter the NUMBER of your team (or type the exact team name): ").strip()
+
+            team_name = None
+
+            # Check if they entered a number
+            if choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(team_list):
+                    team_name = team_list[choice_num - 1]
+                else:
+                    print(f"✗ Invalid number. Please enter a number between 1 and {len(team_list)}")
+                    continue
+            else:
+                # They entered a team name, try to find it
+                for team in team_list:
+                    if team.lower() == choice.lower():
+                        team_name = team
+                        break
+
+                if not team_name:
+                    print(f"✗ Team '{choice}' not found. Please try again.")
+                    continue
+
+            # Confirm the selection
+            confirm = input(f"\nYou selected: {team_name}\nIs this correct? (y/n): ").strip().lower()
+            if confirm == 'y':
+                set_key('.env', 'YAHOO_TEAM_NAME', team_name)
+                print(f"\n✓ Team name saved: {team_name}")
+                return True
+            else:
+                print("\nLet's try again...")
+                continue
+
+    except Exception as e:
+        print(f"\n✗ Error fetching teams: {e}")
+        print("\nYou can manually set your team name later by editing .env file")
+        print("and setting YAHOO_TEAM_NAME to your exact team name.")
+
+        manual_name = input("\nWould you like to manually enter your team name now? (y/n): ").strip().lower()
+        if manual_name == 'y':
+            team_name = input("Enter your exact team name: ").strip()
+            if team_name:
+                set_key('.env', 'YAHOO_TEAM_NAME', team_name)
+                print(f"\n✓ Team name saved: {team_name}")
+                print("Note: This will be validated when you start the chatbot.")
+                return True
+
+        return False
+
+
 def test_configuration():
     """Test the configuration by attempting to import and initialize clients."""
     print_header("Testing Configuration")
@@ -169,6 +268,7 @@ def main():
     print("  1. A Yahoo Fantasy Football account with an active league")
     print("  2. A Yahoo Developer App (we'll help you create one)")
     print("  3. An Anthropic API key (for Claude AI)")
+    print("  4. Your team name from your Yahoo Fantasy league")
 
     input("\nPress Enter to continue...")
 
@@ -182,6 +282,7 @@ def main():
     needs_yahoo = not (os.getenv('YAHOO_CLIENT_ID') and os.getenv('YAHOO_CLIENT_SECRET'))
     needs_league = not os.getenv('YAHOO_LEAGUE_ID')
     needs_anthropic = not os.getenv('ANTHROPIC_API_KEY')
+    needs_team_name = not os.getenv('YAHOO_TEAM_NAME') or os.getenv('YAHOO_TEAM_NAME') == 'your_team_name_here'
 
     # Run setup steps as needed
     if needs_yahoo:
@@ -204,6 +305,15 @@ def main():
             sys.exit(1)
     else:
         print("\n✓ Anthropic API key already configured")
+
+    # Team name setup - REQUIRED and should come after Yahoo/League setup
+    if needs_team_name:
+        if not setup_team_name():
+            print("\n✗ Setup incomplete - Team name is required")
+            print("You can run setup.py again or manually edit .env to set YAHOO_TEAM_NAME")
+            sys.exit(1)
+    else:
+        print("\n✓ Team name already configured")
 
     # Test configuration
     print("\n" + "=" * 60)
