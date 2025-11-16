@@ -41,22 +41,12 @@ class YahooFantasyClient:
     def _initialize_client(self):
         """Initialize the YFPY client with OAuth."""
         try:
-            # Calculate game_id from season for NFL
-            # NFL game IDs: 2024 season = 449, increments by ~1-2 per year
-            # Formula: base year 2001 = 57, then increments
-            season_year = int(self.season) if self.season else 2024
-
-            # For 2024, game_id is approximately 449
-            # This is an approximation - adjust if needed
-            if season_year >= 2024:
-                game_id = 449 + (season_year - 2024)
-            else:
-                game_id = None  # Let YFPY auto-determine for older seasons
-
+            # Let YFPY auto-determine the game_id based on current season
+            # This avoids issues with incorrect game_id calculations
             self.yahoo_query = YahooFantasySportsQuery(
                 league_id=self.league_id,
                 game_code=self.game_code,
-                game_id=game_id,
+                game_id=None,  # Auto-determined by YFPY
                 yahoo_consumer_key=self.client_id,
                 yahoo_consumer_secret=self.client_secret,
                 env_file_location=Path.cwd(),
@@ -297,15 +287,26 @@ class YahooFantasyClient:
             def decode_if_bytes(val):
                 return val.decode('utf-8') if isinstance(val, bytes) else val
 
-            # YFPY can get free agents
+            # YFPY get_league_players accepts 'limit' not 'player_count'
+            # and uses 'status' for filtering (A = available)
             free_agents = self.yahoo_query.get_league_players(
-                player_count=count,
-                status='A',  # Available players
-                position=position
+                limit=count,
+                status='A'  # Available players only
             )
 
             players = []
+            if not free_agents:
+                return []
+
             for player in free_agents:
+                # Filter by position if specified
+                if position:
+                    player_pos = player.primary_position if hasattr(player, 'primary_position') else ''
+                    if isinstance(player_pos, bytes):
+                        player_pos = player_pos.decode('utf-8')
+                    if player_pos != position:
+                        continue
+
                 player_info = {
                     'name': decode_if_bytes(player.name.full) if hasattr(player.name, 'full') else decode_if_bytes(str(player.name)),
                     'player_id': player.player_id,
@@ -314,6 +315,10 @@ class YahooFantasyClient:
                     'percent_owned': float(player.percent_owned.value) if hasattr(player, 'percent_owned') and player.percent_owned else 0.0,
                 }
                 players.append(player_info)
+
+                # Stop after getting enough players
+                if len(players) >= count:
+                    break
 
             return players
         except Exception as e:
