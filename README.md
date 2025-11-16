@@ -6,7 +6,12 @@ An AI-powered chatbot that provides personalized fantasy football advice using t
 
 - **Real-time Team Analysis**: Get insights on your current roster, lineup decisions, and player performance
 - **Trade Advice**: Analyze potential trades and get AI-powered recommendations
-- **Waiver Wire Help**: Find the best available players on waivers
+- **Waiver Wire Intelligence**:
+  - View top available free agents by position
+  - See ownership percentages across Yahoo leagues
+  - Track recently dropped players (🔥 indicators)
+  - Get personalized pickup/drop recommendations
+  - Smart player ranking based on availability and recent activity
 - **Matchup Analysis**: Get weekly matchup insights and start/sit recommendations
 - **League Insights**: Understand your league standings and competition
 
@@ -80,14 +85,27 @@ python chatbot.py
 
 ### Example Questions
 
+**Start/Sit Decisions:**
 - "Should I start Player X or Player Y this week?"
-- "What trades should I consider?"
-- "Who are the best players on waivers?"
+- "Who should I stream at QB/TE/DEF this week?"
+
+**Waiver Wire:**
+- "Who should I pick up from waivers this week?"
+- "Give me your top 3 waiver wire pickups with drop recommendations"
+- "Who are the best available RBs I should target?"
+- "Which players should I drop from my bench?"
+- "Should I pick up [Player Name]? Who should I drop?"
+
+**Team Analysis:**
 - "Analyze my team's strengths and weaknesses"
 - "What's my chances of winning this week?"
 - "Show me my current roster"
 
-Type `quit`, `exit`, or `q` to end the conversation.
+**Trade Advice:**
+- "What trades should I consider?"
+- "Should I trade [Player A] for [Player B]?"
+
+Type `quit`, `exit`, or `q` to end the conversation. Type `help` to see available commands.
 
 ## Project Structure
 
@@ -106,6 +124,25 @@ Fantasy/
 1. **Data Retrieval**: The chatbot connects to Yahoo Fantasy API to fetch your team, league, and player data
 2. **AI Analysis**: Your questions and fantasy data are sent to Claude AI for intelligent analysis
 3. **Personalized Advice**: Claude provides contextual advice based on your specific team and league situation
+
+### Waiver Wire Intelligence
+
+The app uses a multi-strategy approach to provide accurate waiver wire information:
+
+1. **Player Data Fetching**: Retrieves available players from Yahoo Fantasy API
+2. **Transaction Tracking**: Analyzes recent league transactions to identify:
+   - Recently dropped players (marked with 🔥)
+   - Recently added players (filtered out as likely unavailable)
+3. **Smart Filtering**:
+   - Filters by ownership type (waivers, free agents)
+   - Validates player data quality
+   - Removes injured/suspended players from top recommendations
+4. **Intelligent Ranking**:
+   - Prioritizes by ownership percentage (higher % = more reliable)
+   - Boosts recently dropped players (potential overreactions)
+   - Considers injury status and team affiliation
+
+**Note**: The Yahoo Fantasy API has some limitations with player data freshness. The app does its best to filter out stale information, but always cross-reference important decisions with the Yahoo Fantasy website.
 
 ## Troubleshooting
 
