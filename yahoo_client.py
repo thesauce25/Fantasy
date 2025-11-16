@@ -105,10 +105,12 @@ class YahooFantasyClient:
     def get_my_team(self) -> Optional[Dict[str, Any]]:
         """Get the user's fantasy team information."""
         try:
-            # Get all league teams with standings
-            teams = self.yahoo_query.get_league_teams()
-            if not teams:
+            # Get standings which includes full team data with records
+            standings_obj = self.yahoo_query.get_league_standings()
+            if not hasattr(standings_obj, 'teams') or not standings_obj.teams:
                 return None
+
+            teams = standings_obj.teams
 
             # Decode bytes to string if necessary
             def decode_if_bytes(val):
@@ -140,11 +142,11 @@ class YahooFantasyClient:
                 'team_id': my_team.team_id,
                 'name': decode_if_bytes(my_team.name),
                 'managers': [decode_if_bytes(m.nickname) for m in my_team.managers] if hasattr(my_team, 'managers') and my_team.managers else [],
-                'wins': my_team.team_standings.outcome_totals.wins if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
-                'losses': my_team.team_standings.outcome_totals.losses if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
-                'ties': my_team.team_standings.outcome_totals.ties if hasattr(my_team, 'team_standings') and my_team.team_standings else 0,
-                'points_for': float(my_team.team_standings.points_for) if hasattr(my_team, 'team_standings') and my_team.team_standings else 0.0,
-                'points_against': float(my_team.team_standings.points_against) if hasattr(my_team, 'team_standings') and my_team.team_standings else 0.0,
+                'wins': my_team.team_standings.outcome_totals.wins if hasattr(my_team, 'team_standings') and my_team.team_standings and hasattr(my_team.team_standings, 'outcome_totals') else 0,
+                'losses': my_team.team_standings.outcome_totals.losses if hasattr(my_team, 'team_standings') and my_team.team_standings and hasattr(my_team.team_standings, 'outcome_totals') else 0,
+                'ties': my_team.team_standings.outcome_totals.ties if hasattr(my_team, 'team_standings') and my_team.team_standings and hasattr(my_team.team_standings, 'outcome_totals') else 0,
+                'points_for': float(my_team.team_standings.points_for) if hasattr(my_team, 'team_standings') and my_team.team_standings and hasattr(my_team.team_standings, 'points_for') else 0.0,
+                'points_against': float(my_team.team_standings.points_against) if hasattr(my_team, 'team_standings') and my_team.team_standings and hasattr(my_team.team_standings, 'points_against') else 0.0,
             }
             return team_info
 
@@ -293,79 +295,14 @@ class YahooFantasyClient:
             return None
 
     def get_free_agents(self, position: Optional[str] = None, count: int = 25) -> List[Dict[str, Any]]:
-        """Get top available free agents."""
-        try:
-            def decode_if_bytes(val):
-                return val.decode('utf-8') if isinstance(val, bytes) else val
+        """Get top available free agents.
 
-            # YFPY 17.0 uses 'player_count_limit' parameter
-            # Fetch more players than needed since we'll filter for available only
-            all_players = self.yahoo_query.get_league_players(
-                player_count_limit=200,  # Get top 200 players
-                player_count_start=0
-            )
-
-            players = []
-            if not all_players:
-                return []
-
-            # Convert to list if it's not already
-            if not isinstance(all_players, list):
-                all_players = [all_players] if all_players else []
-
-            for player in all_players:
-                # Check if player is available (not owned by any team)
-                # A player is available if they don't have an owner_team_key or ownership_type is waivers/freeagents
-                is_available = False
-
-                if hasattr(player, 'ownership') and player.ownership:
-                    ownership = player.ownership
-
-                    # Check if player has no owner (owner_team_key is None or empty)
-                    if hasattr(ownership, 'owner_team_key'):
-                        owner_key = ownership.owner_team_key
-                        if owner_key is None or owner_key == '' or (isinstance(owner_key, bytes) and owner_key == b''):
-                            is_available = True
-
-                    # Also check ownership_type
-                    if not is_available and hasattr(ownership, 'ownership_type'):
-                        ownership_type = decode_if_bytes(ownership.ownership_type)
-                        is_available = ownership_type in ['waivers', 'freeagents']
-                else:
-                    # If no ownership data, assume available
-                    is_available = True
-
-                # Skip owned players
-                if not is_available:
-                    continue
-
-                # Filter by position if specified
-                if position:
-                    player_pos = player.primary_position if hasattr(player, 'primary_position') else ''
-                    if isinstance(player_pos, bytes):
-                        player_pos = player_pos.decode('utf-8')
-                    if player_pos != position:
-                        continue
-
-                player_info = {
-                    'name': decode_if_bytes(player.name.full) if hasattr(player.name, 'full') else decode_if_bytes(str(player.name)),
-                    'player_id': player.player_id,
-                    'position': decode_if_bytes(player.primary_position) if hasattr(player, 'primary_position') else '',
-                    'team': decode_if_bytes(player.editorial_team_abbr) if hasattr(player, 'editorial_team_abbr') else '',
-                    'percent_owned': float(player.percent_owned.value) if hasattr(player, 'percent_owned') and player.percent_owned else 0.0,
-                }
-                players.append(player_info)
-
-                # Stop after getting enough players
-                if len(players) >= count:
-                    break
-
-            return players
-        except Exception as e:
-            print(f"Error fetching free agents: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
+        NOTE: This feature is currently disabled due to Yahoo API limitations.
+        The get_league_players() endpoint returns outdated player data (wrong teams, old rosters).
+        Users should check the Yahoo Fantasy website directly for accurate waiver wire information.
+        """
+        # Disabled - Yahoo API returns outdated player data
+        return []
 
     def format_team_summary(self) -> str:
         """Format a summary of the user's team and league."""
@@ -375,8 +312,6 @@ class YahooFantasyClient:
             roster = self.get_roster()
             standings = self.get_standings()
             matchup = self.get_matchup()
-            # Get top 50 available free agents
-            free_agents = self.get_free_agents(count=50)
 
             summary = []
             summary.append("=== FANTASY FOOTBALL TEAM SUMMARY ===\n")
@@ -425,33 +360,11 @@ class YahooFantasyClient:
                     )
                 summary.append("")
 
-            if free_agents:
-                summary.append("=== TOP AVAILABLE FREE AGENTS ===")
-                # Group by position
-                qbs = [p for p in free_agents if p['position'] == 'QB'][:5]
-                rbs = [p for p in free_agents if p['position'] == 'RB'][:5]
-                wrs = [p for p in free_agents if p['position'] == 'WR'][:5]
-                tes = [p for p in free_agents if p['position'] == 'TE'][:5]
-
-                if qbs:
-                    summary.append("QBs:")
-                    for player in qbs:
-                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
-
-                if rbs:
-                    summary.append("\nRBs:")
-                    for player in rbs:
-                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
-
-                if wrs:
-                    summary.append("\nWRs:")
-                    for player in wrs:
-                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
-
-                if tes:
-                    summary.append("\nTEs:")
-                    for player in tes:
-                        summary.append(f"  {player['name']} - {player['team']} ({player['percent_owned']:.0f}% owned)")
+            # Note about waiver wire
+            summary.append("=== WAIVER WIRE / FREE AGENTS ===")
+            summary.append("Note: Please check your Yahoo Fantasy league page directly for")
+            summary.append("accurate waiver wire information (Yahoo API has limitations).")
+            summary.append("")
 
             return "\n".join(summary)
         except Exception as e:
