@@ -41,18 +41,29 @@ class YahooFantasyClient:
     def _initialize_client(self):
         """Initialize the YFPY client with OAuth."""
         try:
-            # Let YFPY auto-determine the game_id based on current season
-            # This avoids issues with incorrect game_id calculations
+            # Calculate game_id based on season year
+            # NFL game IDs: 2023=423, 2024=449, 2025=461
+            season_year = int(self.season) if self.season else 2024
+
+            # Game ID mapping for NFL
+            game_id_map = {
+                2023: 423,
+                2024: 449,
+                2025: 461,
+            }
+
+            game_id = game_id_map.get(season_year, 449)  # Default to 2024
+
             self.yahoo_query = YahooFantasySportsQuery(
                 league_id=self.league_id,
                 game_code=self.game_code,
-                game_id=None,  # Auto-determined by YFPY
+                game_id=game_id,
                 yahoo_consumer_key=self.client_id,
                 yahoo_consumer_secret=self.client_secret,
                 env_file_location=Path.cwd(),
                 browser_callback=True
             )
-            print("✓ Successfully connected to Yahoo Fantasy API")
+            print(f"✓ Successfully connected to Yahoo Fantasy API (Season: {season_year}, Game ID: {game_id})")
         except Exception as e:
             print(f"✗ Failed to initialize Yahoo API client: {e}")
             raise
@@ -287,16 +298,19 @@ class YahooFantasyClient:
             def decode_if_bytes(val):
                 return val.decode('utf-8') if isinstance(val, bytes) else val
 
-            # YFPY get_league_players accepts 'limit' not 'player_count'
-            # and uses 'status' for filtering (A = available)
+            # YFPY 17.0 get_league_players() doesn't accept limit/count parameters
+            # We fetch all available players and manually limit results
             free_agents = self.yahoo_query.get_league_players(
-                limit=count,
-                status='A'  # Available players only
+                status='A'  # A = available players only
             )
 
             players = []
             if not free_agents:
                 return []
+
+            # Convert to list if it's not already
+            if not isinstance(free_agents, list):
+                free_agents = [free_agents] if free_agents else []
 
             for player in free_agents:
                 # Filter by position if specified
