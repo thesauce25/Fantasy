@@ -315,19 +315,25 @@ class YahooFantasyClient:
 
             for player in all_players:
                 # Check if player is available (not owned by any team)
-                # ownership status is in player.ownership or player_ownership
+                # A player is available if they don't have an owner_team_key or ownership_type is waivers/freeagents
                 is_available = False
-                if hasattr(player, 'ownership'):
+
+                if hasattr(player, 'ownership') and player.ownership:
                     ownership = player.ownership
-                    # If ownership_type is 'freeagents' or 'waivers', player is available
-                    if hasattr(ownership, 'ownership_type'):
+
+                    # Check if player has no owner (owner_team_key is None or empty)
+                    if hasattr(ownership, 'owner_team_key'):
+                        owner_key = ownership.owner_team_key
+                        if owner_key is None or owner_key == '' or (isinstance(owner_key, bytes) and owner_key == b''):
+                            is_available = True
+
+                    # Also check ownership_type
+                    if not is_available and hasattr(ownership, 'ownership_type'):
                         ownership_type = decode_if_bytes(ownership.ownership_type)
-                        is_available = ownership_type in ['freeagents', 'waivers']
-                elif hasattr(player, 'player_ownership'):
-                    ownership = player.player_ownership
-                    if hasattr(ownership, 'ownership_type'):
-                        ownership_type = decode_if_bytes(ownership.ownership_type)
-                        is_available = ownership_type in ['freeagents', 'waivers']
+                        is_available = ownership_type in ['waivers', 'freeagents']
+                else:
+                    # If no ownership data, assume available
+                    is_available = True
 
                 # Skip owned players
                 if not is_available:
