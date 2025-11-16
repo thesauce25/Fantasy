@@ -42,7 +42,10 @@ If you prefer manual setup:
 
 2. **Get Yahoo API Credentials:**
    - Go to https://developer.yahoo.com/apps/create/
-   - Create an app with Fantasy Sports permissions
+   - Create an app with:
+     - Homepage URL: `http://localhost:8000`
+     - Redirect URI: `http://localhost:8000`
+     - Fantasy Sports permissions (Read access)
    - Copy your Client ID and Client Secret to `.env`
 
 3. **Get Your League ID:**

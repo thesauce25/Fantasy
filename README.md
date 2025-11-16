@@ -38,7 +38,8 @@ pip install -r requirements.txt
 3. Fill in the app details:
    - **Application Name**: Fantasy Football Chatbot (or your choice)
    - **Application Type**: Web Application
-   - **Redirect URI**: `https://localhost:8000` (or `oob` for out-of-band)
+   - **Homepage URL**: `http://localhost:8000`
+   - **Redirect URI(s)**: `http://localhost:8000`
    - **API Permissions**: Select "Fantasy Sports" with Read access
 4. Save your **Client ID** and **Client Secret**
 
