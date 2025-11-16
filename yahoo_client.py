@@ -91,29 +91,15 @@ class YahooFantasyClient:
     def get_my_team(self) -> Optional[Dict[str, Any]]:
         """Get the user's fantasy team information."""
         try:
-            # First get user's teams to find which team belongs to the authenticated user
-            user_teams = self.yahoo_query.get_user_teams()
-
-            # Get all league teams
+            # Get all league teams with standings
             teams = self.yahoo_query.get_league_teams()
             if not teams:
                 return None
 
-            # Find the user's team by matching team_key
-            my_team = None
-            if user_teams and len(user_teams) > 0:
-                # user_teams returns teams across all leagues, find ours
-                for ut in user_teams:
-                    for team in teams:
-                        if team.team_key == ut.team_key:
-                            my_team = team
-                            break
-                    if my_team:
-                        break
-
-            # If we couldn't match, just use the first team (fallback)
-            if not my_team:
-                my_team = teams[0]
+            # For now, we'll use the first team as a simple approach
+            # In a multi-user scenario, you'd need to identify which team belongs to the authenticated user
+            # This would require checking team ownership through managers/GUIDs
+            my_team = teams[0]
 
             # Decode bytes to string if necessary
             def decode_if_bytes(val):
