@@ -26,6 +26,7 @@ class YahooFantasyClient:
         self.league_id = os.getenv('YAHOO_LEAGUE_ID')
         self.game_code = os.getenv('YAHOO_GAME_CODE', 'nfl')
         self.season = os.getenv('YAHOO_SEASON', '2024')
+        self.team_name = os.getenv('YAHOO_TEAM_NAME', '')
 
         if not all([self.client_id, self.client_secret]):
             raise ValueError(
@@ -96,14 +97,30 @@ class YahooFantasyClient:
             if not teams:
                 return None
 
-            # For now, we'll use the first team as a simple approach
-            # In a multi-user scenario, you'd need to identify which team belongs to the authenticated user
-            # This would require checking team ownership through managers/GUIDs
-            my_team = teams[0]
-
             # Decode bytes to string if necessary
             def decode_if_bytes(val):
                 return val.decode('utf-8') if isinstance(val, bytes) else val
+
+            # Find the user's team
+            my_team = None
+
+            # If team name is specified in config, use it to find the team
+            if self.team_name:
+                for team in teams:
+                    team_name_decoded = decode_if_bytes(team.name)
+                    if team_name_decoded.lower() == self.team_name.lower():
+                        my_team = team
+                        print(f"✓ Found your team: {team_name_decoded}")
+                        break
+
+                if not my_team:
+                    print(f"⚠ Warning: Could not find team '{self.team_name}' in league")
+                    print(f"Available teams: {[decode_if_bytes(t.name) for t in teams[:5]]}")
+                    print("Using first team as fallback")
+
+            # If no team name specified or not found, use first team
+            if not my_team:
+                my_team = teams[0]
 
             team_info = {
                 'team_key': my_team.team_key,
