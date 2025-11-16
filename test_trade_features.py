@@ -23,7 +23,8 @@ def test_trade_features():
         teams = client.get_all_league_teams()
         print(f"✓ Found {len(teams)} teams in league:")
         for team in teams[:3]:  # Show first 3
-            print(f"   - {team['name']} ({team['record']}) - Team ID: {team['team_id']}")
+            record = f"{team['wins']}-{team['losses']}-{team['ties']}"
+            print(f"   - {team['name']} ({record}) - Team ID: {team['team_id']}")
 
         print("\n3. Testing get_all_teams_rosters()...")
         all_rosters = client.get_all_teams_rosters()
