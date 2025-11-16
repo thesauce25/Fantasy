@@ -46,8 +46,8 @@ class YahooFantasyClient:
                 game_id=None,  # Will be auto-determined
                 yahoo_consumer_key=self.client_id,
                 yahoo_consumer_secret=self.client_secret,
-                env_var_directory=Path.cwd(),
-                save_data=False
+                env_file_location=Path.cwd(),
+                browser_callback=True
             )
             print("✓ Successfully connected to Yahoo Fantasy API")
         except Exception as e:

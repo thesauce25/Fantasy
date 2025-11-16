@@ -75,11 +75,11 @@ Keep responses concise but informative. Use bullet points and clear formatting w
             return True
         except Exception as e:
             self.console.print(f"[bold red]Error connecting to Yahoo API:[/bold red] {e}")
-            self.console.print("\n[yellow]Please check your .env file and ensure:")
-            self.console.print("1. YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET are set")
-            self.console.print("2. YAHOO_LEAGUE_ID is set to your league ID")
-            self.console.print("3. You have a Yahoo Fantasy Football account")
-            self.console.print("\nSee README.md for detailed setup instructions.[/yellow]")
+            self.console.print("\n[yellow]Please check your .env file and ensure:[/yellow]")
+            self.console.print("[yellow]1. YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET are set[/yellow]")
+            self.console.print("[yellow]2. YAHOO_LEAGUE_ID is set to your league ID[/yellow]")
+            self.console.print("[yellow]3. You have a Yahoo Fantasy Football account[/yellow]")
+            self.console.print("[yellow]\nSee README.md for detailed setup instructions.[/yellow]")
             return False
 
     def get_team_context(self) -> str:
